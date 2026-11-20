@@ -1,21 +1,50 @@
 export type Identity =
   | { mode: "jwt"; token: string }
-  | { mode: "local"; actorId: string; role: string; zones: string }
-  | { mode: "session"; actorId: string; role: string; username: string; fullName?: string; mustChangePassword: boolean };
-
-export type AuthAccount = { id: string; username: string; fullName?: string; role: string; mustChangePassword: boolean };
-export type SessionIdentity = Extract<Identity, { mode: "session" }>;
-
-export function sessionIdentity(account: AuthAccount): SessionIdentity {
-  return { mode: "session", actorId: account.id, username: account.username, fullName: account.fullName,
-    role: account.role, mustChangePassword: account.mustChangePassword };
-}
-
-export class ApiRequestError extends Error {
-  constructor(message: string, readonly status: number) { super(message); }
-}
+  | { mode: "local"; actorId: string; role: string; zones: string };
 
 export type Page<T> = { content: T[]; page: number; size: number; totalElements: number };
+export type OptionItem = { id: string; label: string; zoneId?: string };
+export type ReferenceOptionsData = {
+  zones: OptionItem[];
+  locations: OptionItem[];
+  categories: OptionItem[];
+  premises: OptionItem[];
+  stores: OptionItem[];
+  floors: OptionItem[];
+  events: OptionItem[];
+  vouchers: OptionItem[];
+  promotions: OptionItem[];
+  customers: OptionItem[];
+  customerVouchers: OptionItem[];
+  invoices: OptionItem[];
+  contracts: OptionItem[];
+  staff: OptionItem[];
+};
+export type ReferenceOptionMaps = {
+  zones: Record<string, string>;
+  locations: Record<string, string>;
+  categories: Record<string, string>;
+  premises: Record<string, string>;
+  stores: Record<string, string>;
+  floors: Record<string, string>;
+  events: Record<string, string>;
+  vouchers: Record<string, string>;
+  promotions: Record<string, string>;
+  customers: Record<string, string>;
+  customerVouchers: Record<string, string>;
+  invoices: Record<string, string>;
+  contracts: Record<string, string>;
+  staff: Record<string, string>;
+};
+
+export function toOptionRecord(items?: OptionItem[]): Record<string, string> {
+  const map: Record<string, string> = {};
+  if (!items) return map;
+  for (const item of items) {
+    map[item.id] = item.label;
+  }
+  return map;
+}
 type Envelope<T> = {
   data?: T;
   message?: string;
@@ -45,7 +74,6 @@ export async function request<T>(path: string, options: {
   const { identity, method, body, signal } = options;
   const headers = identityHeaders(identity);
   headers.set("Accept", "application/json");
-  if (method && !["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase())) headers.set("X-ANEON-Request", "aneon-web");
   const multipart = body instanceof FormData;
   if (body !== undefined && !multipart) headers.set("Content-Type", "application/json");
   const response = await fetch(`/aneon-api/${path}`, {
@@ -56,11 +84,10 @@ export async function request<T>(path: string, options: {
   if (!response.ok || envelope?.data === undefined) {
     const fields = envelope?.errors?.map(({ field, message }) => `${field} — ${message}`).join(". ");
     const message = {
-      401: path === "auth/login" ? "Tên đăng nhập hoặc mật khẩu không đúng." : "Phiên truy cập không hợp lệ hoặc đã hết hạn.",
+      401: "Phiên truy cập không hợp lệ hoặc đã hết hạn.",
       403: "Tài khoản không có quyền thực hiện thao tác này.",
-      429: "Bạn đã thử quá nhiều lần. Vui lòng thử lại sau.",
     }[response.status];
-    throw new ApiRequestError(message || fields || envelope?.message || "Không thể kết nối máy chủ ANEON. Vui lòng thử lại.", response.status);
+    throw new Error(message || fields || envelope?.message || "Không thể kết nối máy chủ ANEON. Vui lòng thử lại.");
   }
   return envelope.data;
 }
